@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import re
+import subprocess
 import tempfile
 import time
 import urllib.error
@@ -108,17 +109,27 @@ def upload(slot, path):
     if urllib.parse.urlsplit(url).scheme != 'https':
         raise SyncError('Upload URL must use HTTPS')
     # GitCode returns a signed URL and required headers; never print either.
-    data = path.read_bytes()
-    for attempt in range(3):
-        try:
-            req = urllib.request.Request(url, data=data, headers=slot['headers'], method='PUT')
-            with OPENER.open(req, timeout=600) as response:
-                response.read()
-            return
-        except (urllib.error.URLError, TimeoutError):
-            if attempt == 2:
-                raise SyncError(f'Upload failed for {path.name}') from None
-            time.sleep(2 ** attempt)
+    print(f'Upload destination: {urllib.parse.urlsplit(url).hostname}', flush=True)
+    # curl handles an early HTTP rejection while sending a large body. Signed
+    # URLs live only in a private temporary config, never command-line logs.
+    with tempfile.TemporaryDirectory(prefix='soln-upload-') as directory:
+        config = Path(directory) / 'curl.conf'
+        response = Path(directory) / 'response'
+        settings = ['url = ' + json.dumps(url)]
+        settings.extend('header = ' + json.dumps(f'{k}: {v}') for k, v in slot['headers'].items())
+        config.write_text('\n'.join(settings) + '\n')
+        config.chmod(0o600)
+        result = subprocess.run([
+            'curl', '--config', str(config), '--silent', '--show-error',
+            '--request', 'PUT', '--upload-file', str(path), '--connect-timeout', '30',
+            '--max-time', '180', '--output', str(response),
+            '--write-out', '%{http_code} %{size_upload} %{time_total}',
+        ], capture_output=True, text=True, timeout=200)
+        fields = result.stdout.split()
+        status = fields[0] if fields else '000'
+        print(f'Upload result: HTTP {status}, curl exit {result.returncode}', flush=True)
+        if result.returncode != 0 or not status.startswith('2'):
+            raise SyncError(f'Upload failed for {path.name}: HTTP {status}, curl exit {result.returncode}')
 
 
 def sync():
