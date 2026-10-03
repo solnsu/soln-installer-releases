@@ -1,4 +1,4 @@
-Soln desktop installer 1.0.0 preview for deploying a tenant Runtime on your own computer. / Soln 本地租户 Runtime 安装器 1.0.0 预览版。
+Soln desktop installer 1.0.0 preview for deploying a tenant Runtime on your own computer. / Soln 本地空间 Runtime 安装器 1.0.0 预览版。
 
 | Platform / 平台 | Download / 下载文件 |
 | --- | --- |
